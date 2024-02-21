@@ -17,8 +17,8 @@ def run_training(selected_game, selected_model, epochs,parameters):
     rewards = []
 
     # Load the selected game environment
-    env = gym.make(f"{selected_game}", render_mode='rgb_array')
-    env.metadata["render_fps"] = 500
+    env = gym.make("ALE/"+f"{selected_game}", render_mode='rgb_array')
+    env.metadata["render_fps"] = 800
     # Initialize the DQNAgent
     
     if selected_model == "DQN":
@@ -103,15 +103,15 @@ def run_training(selected_game, selected_model, epochs,parameters):
                 break 
     if selected_model == "PPO":
         '''# Instantiate the PPO Agent
-    agent = PPOAgent(
-        n_actions=env.action_space.n,
-        batch_size=ppo_parameters['batch_size'],
-        lr=ppo_parameters['learning_rate'],
-        learn_epochs=ppo_parameters['learn_epochs'],
-        input_dims=env.observation_space.shape[0],
-        gamma=ppo_parameters['gamma'],  # Added gamma if needed in agent
-        # Other parameters to the PPO Agent can be added here as needed
-    )'''
+        agent = PPOAgent(
+            n_actions=env.action_space.n,
+            batch_size=ppo_parameters['batch_size'],
+            lr=ppo_parameters['learning_rate'],
+            learn_epochs=ppo_parameters['learn_epochs'],
+            input_dims=env.observation_space.shape[0],
+            gamma=ppo_parameters['gamma'],  # Added gamma if needed in agent
+            # Other parameters to the PPO Agent can be added here as needed
+        )'''
         N = 20  # Number of steps before updating the network
         batch_size = parameters['batch_size']
         learn_epochs = parameters['learn_epochs']
@@ -200,7 +200,7 @@ if  selected_model == "PPO":
     selected_game = st.selectbox("Select Gym Game", [ "CartPole-v1"])
 
 else :
-          selected_game = "ALE/"+st.selectbox("Select Gym Game", ["SpaceInvaders-v5", "CartPole-v5", "Pong-v5", "BeamRider-v5", "Breakout-v5", "Enduro-v5", "Qbert-v5", "Seaquest-v5"])
+          selected_game = st.selectbox("Select Gym Game", ["SpaceInvaders-v5", "CartPole-v5", "Pong-v5", "BeamRider-v5", "Breakout-v5", "Enduro-v5", "Qbert-v5", "Seaquest-v5"])
 if  selected_model == "DQN":
     epochs = st.slider("Number of Epochs", min_value=5, max_value=200, value=20, step=1)
 parameters = {}
