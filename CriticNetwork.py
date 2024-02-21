@@ -6,7 +6,7 @@ from torch.optim import Adam
 import os
 from preprocessing import *
 class CriticNetwork(nn.Module):
-    def __init__(self,input_dims,lr,condition,fc1_dims=256,fc2_dims=256,chkpt_dir="checkpoint"):
+    def __init__(self,input_dims,lr,condition,fc1_dims=256,fc2_dims=256,chkpt_dir="SAVED"):
         super(CriticNetwork,self).__init__()
         self.chkpt_dir = chkpt_dir
         self.chkpt_file = os.path.join(chkpt_dir,"critic_torch_ppo")

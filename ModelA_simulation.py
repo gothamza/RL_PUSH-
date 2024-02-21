@@ -17,11 +17,12 @@ def run_training(selected_game, selected_model, epochs,parameters):
     rewards = []
 
     # Load the selected game environment
-    env = gym.make("ALE/"+f"{selected_game}", render_mode='rgb_array')
-    env.metadata["render_fps"] = 800
+    
     # Initialize the DQNAgent
     
     if selected_model == "DQN":
+        env = gym.make("ALE/"+f"{selected_game}", render_mode='rgb_array')
+        env.metadata["render_fps"] = 800
         agent = DQNAgent(env.observation_space.shape, env.action_space.n, lr=int(parameters['learning_rate']), gama=parameters['gamma'],memory_size=parameters['memory_size'],batch_size =parameters['batch_size'],epsilon=1,chkpt_file=parameters['save_name'])
         if keep_simulation :
             agent.load_file(nammod)
@@ -101,90 +102,60 @@ def run_training(selected_game, selected_model, epochs,parameters):
             print(f"******** reward at epoch {epoch} = {reward_t} ********")
             if end_simulation :  
                 break 
+            print(f"--------- saving the model at epoch {epoch} ---------")
+            agent.save()
     if selected_model == "PPO":
-        '''# Instantiate the PPO Agent
+        # Instantiate environment and PPOAgent
+        env = gym.make("CartPole-v1",render_mode='rgb_array')
         agent = PPOAgent(
             n_actions=env.action_space.n,
-            batch_size=ppo_parameters['batch_size'],
-            lr=ppo_parameters['learning_rate'],
-            learn_epochs=ppo_parameters['learn_epochs'],
+            batch_size=parameters['batch_size'],
+            lr=parameters['learning_rate'],
+            learn_epochs=parameters['learn_epochs'],
             input_dims=env.observation_space.shape[0],
-            gamma=ppo_parameters['gamma'],  # Added gamma if needed in agent
-            # Other parameters to the PPO Agent can be added here as needed
-        )'''
-        N = 20  # Number of steps before updating the network
-        batch_size = parameters['batch_size']
-        learn_epochs = parameters['learn_epochs']
-        lr = parameters['learning_rate']
-        n_games = parameters['n_games']
-        score_history = list()
-        avg_score = 0
-        n_steps = 0
-        agent = PPOAgent(n_actions=env.action_space.n, batch_size=batch_size, lr=lr,
-                        learn_epochs=learn_epochs, input_dims=env.observation_space.shape[0], condition=False)
-        if keep_simulation:
-            agent.load_file(nammod)
-
-        # Directory to save frames as images
-        frames_dir = "frames"
-        os.makedirs(frames_dir, exist_ok=True)
-        
+            gamma=parameters['gamma'],  # If your PPOAgent uses gamma
+        )
         image_placeholder = st.empty()
-        
-        epoch = 1  # Since PPO doesn't really have epochs, we'll just count games as epochs
-
-        for i in range(n_games):
-            observation, _ = env.reset()
+        # Training loop
+        score_history = []
+        for i in range(parameters['n_games']):
+            observation, info = env.reset()
             done = False
             score = 0
-            loss = 0
             while not done:
                 action, prob, val = agent.act(observation)
-                observation_, reward, done, _, _ = env.step(action)
+                observation_, reward, done, info , _= env.step(action)
+                
+                # Add to score and remember experience
                 score += reward
                 agent.remember_exp(observation, action, prob, val, reward, done)
-                
-                # Render the current state as an image
-                frame = env.render()
-
-                # Save and process the frame as done in DQN part
-                image = Image.fromarray(frame)
-                border_color = 'black'
-                border_width = 10
-                image = ImageOps.expand(image, border=border_width, fill=border_color)
-                width = 200
-                height = 200
-                image = image.resize((width, height))
-                image_placeholder.image(image, caption=f"Action: {action}", use_column_width=True)
-                time.sleep(0.001)  # Add a small delay to display each image
-
                 observation = observation_
-
-            # Update the network
-            loss += agent.learn()
-            
-            # Save best model
-            if i == 0 or score > max(score_history):
-                agent.save_model()
                 
-            # Logging
+                # Using Streamlit to display environment as images
+                frame = env.render()
+                image = Image.fromarray(frame)
+                image_placeholder.image(image, caption=f"Step: {len(score_history)}, Score: {score}", use_column_width=True)
+                time.sleep(0.01)  # Add delay to slow down rendering 
+
+            # Update agent with collected experiences
+            loss = agent.learn()
+            
+            # Save and logging
             score_history.append(score)
             avg_score = np.mean(score_history[-100:])
-
             with st.sidebar:
                 st.text(f"****** Game {i} ******") 
                 st.text(f"  ---> Score         = {score}")
                 st.text(f"  ---> Average Score = {avg_score}")
                 st.text(f"  ---> Loss          = {loss}")
-
-            print(f"Game {i} - Score: {score}, Avg Score: {avg_score}, Loss: {loss}")
-
-            epoch += 1
+            print(f"Game {i} Score: {score}, Average Score: {avg_score}, Loss: {loss}")
+            losses.append(loss)
+            rewards.append(score)
             if end_simulation:
                 break
-            
-    print(f"--------- saving the model at epoch {epoch} ---------")
-    agent.save()
+            print(f"--------- saving the model at epoch {parameters['n_games']} ---------")
+            agent.save_model()
+    
             
         
         
@@ -201,12 +172,14 @@ if  selected_model == "PPO":
 
 else :
           selected_game = st.selectbox("Select Gym Game", ["SpaceInvaders-v5", "CartPole-v5", "Pong-v5", "BeamRider-v5", "Breakout-v5", "Enduro-v5", "Qbert-v5", "Seaquest-v5"])
+epochs=0
 if  selected_model == "DQN":
     epochs = st.slider("Number of Epochs", min_value=5, max_value=200, value=20, step=1)
 parameters = {}
 
 # PPO initialization with selected parameters
 if selected_model == "PPO":
+    
     st.sidebar.title("PPO Parameter Selection")
     lr_model = st.sidebar.selectbox("Learning Rate", [0.05, 0.01])
     gamma_model = st.sidebar.selectbox("Gamma Parameter", [0.99, 0.9])
@@ -216,6 +189,13 @@ if selected_model == "PPO":
     n_games_model = st.sidebar.number_input("Number of Games", min_value=30, max_value=1000)  # Added for n_games option
     namepth = st.sidebar.text_input("Enter your saving name for this model")
 
+    # Check if the user has entered a name for the model
+    if not namepth:
+        st.sidebar.error("Please enter a name for the model before proceeding.")
+        st.stop()  # This will stop the execution of further statements until the name is entered
+
+    # Proceed with the code if a name is provided
+    parameters['save_name'] = f"{namepth}.pth"
     st.sidebar.title("Epoch Results")
     
     # Parameters dictionary for PPO Agent
@@ -228,13 +208,23 @@ if selected_model == "PPO":
         'n_games': n_games_model,
         'save_name': f"{namepth}.pth"
     }
+    epochs = parameters['n_games']
 if selected_model == "DQN":
     st.sidebar.title("DQN Parameter Selection")
     lr_model = st.sidebar.selectbox("Learning Rate", [0.0001, 0.00025, 0.001, 0.01])
     gamma_model = st.sidebar.selectbox("Discount Factor (gamma)", [0.90, 0.95, 0.99])
     memory_model = st.sidebar.selectbox("Memory Size", [10000, 50000, 100000, 500000, 1000000])
     batch_model = st.sidebar.selectbox("Batch Size", [32, 64, 128])
-    namepth = st.sidebar.text_input("Enter your saving name for this model") 
+    namepth = st.sidebar.text_input("Enter your saving name for this model")
+
+    # Check if the user has entered a name for the model
+    if not namepth:
+        st.sidebar.error("Please enter a name for the model before proceeding.")
+        st.stop()  # This will stop the execution of further statements until the name is entered
+
+    # Proceed with the code if a name is provided
+    parameters['save_name'] = f"{namepth}.pth"
+
     st.sidebar.title("Epoch Results")
 
     # Add parameters to the dictionary
