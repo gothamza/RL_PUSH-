@@ -100,10 +100,11 @@ def run_training(selected_game, selected_model, epochs,parameters):
                 st.text(f"---> Reward = {reward_t}")
             print(f"******** loss at epoch {epoch} = {loss_t} ********")
             print(f"******** reward at epoch {epoch} = {reward_t} ********")
-            if end_simulation :  
+            if end_simulation : 
+                epoch=epoch-1
                 break 
-            print(f"--------- saving the model at epoch {epoch} ---------")
-            agent.save()
+        print(f"--------- saving the model at epoch {epoch} ---------")
+        agent.save()
     if selected_model == "PPO":
         # Instantiate environment and PPOAgent
         env = gym.make("CartPole-v1",render_mode='rgb_array')
@@ -152,9 +153,10 @@ def run_training(selected_game, selected_model, epochs,parameters):
             losses.append(loss)
             rewards.append(score)
             if end_simulation:
+                i=i-1
                 break
-            print(f"--------- saving the model at epoch {parameters['n_games']} ---------")
-            agent.save_model()
+        print(f"--------- saving the model at epoch {i} ---------")
+        agent.save_model()
     
             
         
@@ -186,7 +188,7 @@ if selected_model == "PPO":
     memory_model = st.sidebar.selectbox("Memory Parameter", [1000, 1100])
     batch_model = st.sidebar.selectbox("Batch Size Parameter", [32, 132])
     learn_epochs_model = st.sidebar.selectbox("Learn Epochs", [3, 10])  # Added for learn_epochs option
-    n_games_model = st.sidebar.number_input("Number of Games", min_value=30, max_value=1000)  # Added for n_games option
+    n_games_model = st.sidebar.number_input("Number of Games", min_value=50, max_value=1000)  # Added for n_games option
     namepth = st.sidebar.text_input("Enter your saving name for this model")
 
     # Check if the user has entered a name for the model
@@ -261,11 +263,15 @@ def convert_seconds_to_hms(seconds):
 
 # ...if keep_simulation :
 
+# Streamlit button for stopping and saving
+end_simulation = False
+if st.button("Stop and Save"):
+    end_simulation = True
 
 
 if start_simulation or keep_simulation:
     # Record the start time
-    end_simulation = st.button("stop and save ")
+    
     print(parameters['save_name'])
     start_time = time.time()
 
