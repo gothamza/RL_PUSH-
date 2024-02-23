@@ -12,7 +12,7 @@ import os
 from PIL import ImageOps
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 # Function to run training and display results
-def run_training(selected_game, selected_model, epochs,parameters):
+def run_training_DQN(selected_game, selected_model, epochs,parameters):
     losses = []
     rewards = []
 
@@ -20,155 +20,177 @@ def run_training(selected_game, selected_model, epochs,parameters):
     
     # Initialize the DQNAgent
     
-    if selected_model == "DQN":
-        env = gym.make("ALE/"+f"{selected_game}", render_mode='rgb_array')
-        env.metadata["render_fps"] = 800
-        agent = DQNAgent(env.observation_space.shape, env.action_space.n, lr=int(parameters['learning_rate']), gama=parameters['gamma'],memory_size=parameters['memory_size'],batch_size =parameters['batch_size'],epsilon=1,chkpt_file=parameters['save_name'])
-        if keep_simulation :
-            agent.load_file(nammod)
     
-        # Reset the environment to get the initial state
+    env = gym.make("ALE/"+f"{selected_game}", render_mode='rgb_array')
+    env.metadata["render_fps"] = 800
+    if keep_simulation :
+        parameters['save_name']=nammod
+    agent = DQNAgent(env.observation_space.shape, env.action_space.n, lr=int(parameters['learning_rate']), gama=parameters['gamma'],memory_size=parameters['memory_size'],batch_size =parameters['batch_size'],epsilon=1,chkpt_file=parameters['save_name'])
+    if keep_simulation :
+
+        agent.load()
+
+    # Reset the environment to get the initial state
+    state, _ = env.reset()
+
+    # Directory to save frames as images
+    frames_dir = "frames"
+    os.makedirs(frames_dir, exist_ok=True)
+    
+    image_placeholder = st.empty()
+    # Run the training loop
+    for epoch in range(1, epochs + 1):
+        done = False
+        total_reward = 0.0
         state, _ = env.reset()
+        loss_t = 0.0
+        reward_t = 0.0
+        lifes = env.unwrapped.ale.lives()
 
-        # Directory to save frames as images
-        frames_dir = "frames"
-        os.makedirs(frames_dir, exist_ok=True)
+        while not done:
+            action = agent.act(state)
+            state_, reward, done, _, _ = env.step(action)
+            current_lifes = env.unwrapped.ale.lives()
+
+            # Punish for dying
+            if current_lifes < lifes:
+                lifes = current_lifes
+                reward_t -= 50
+
+            # Actual reward
+            reward_t += reward
+            # For time
+            reward_t -= 1
+
+            agent.remember(state, action, reward, state_, done)
+            loss_t += agent.learn()
+
+            # Render the current state as an image
+            # Render the current state as an image
+            frame = env.render()
+
+            # Save the frame as an image
+            image = Image.fromarray(frame)
+
+            # Add a border to the image
+            border_color = 'black'  # Change this to the color you want
+            border_width = 10  # Change this to the border width you want
+            image = ImageOps.expand(image, border=border_width, fill=border_color)
+
+            # Resize the image
+            width = 200  # Change this to the width you want
+            height = 200  # Change this to the height you want
+            image = image.resize((width, height))
+
+            # Display the image in Streamlit
+            image_placeholder.image(image, caption=f"Action: {action}", use_column_width=True)
+
+            # Add a small delay to display each image
+            time.sleep(0.001)
+
+        agent.be_reasonable(epoch)
+        losses.append(loss_t)
+        rewards.append(reward_t)
+
+        # Initialize a list to store the results of the last 5 epochs
         
-        image_placeholder = st.empty()
-        # Run the training loop
-        for epoch in range(1, epochs + 1):
-            done = False
-            total_reward = 0.0
-            state, _ = env.reset()
-            loss_t = 0.0
-            reward_t = 0.0
-            lifes = env.unwrapped.ale.lives()
-
-            while not done:
-                action = agent.act(state)
-                state_, reward, done, _, _ = env.step(action)
-                current_lifes = env.unwrapped.ale.lives()
-
-                # Punish for dying
-                if current_lifes < lifes:
-                    lifes = current_lifes
-                    reward_t -= 50
-
-                # Actual reward
-                reward_t += reward
-                # For time
-                reward_t -= 1
-
-                agent.remember(state, action, reward, state_, done)
-                loss_t += agent.learn()
-
-                # Render the current state as an image
-                # Render the current state as an image
-                frame = env.render()
-
-                # Save the frame as an image
-                image = Image.fromarray(frame)
-
-                # Add a border to the image
-                border_color = 'black'  # Change this to the color you want
-                border_width = 10  # Change this to the border width you want
-                image = ImageOps.expand(image, border=border_width, fill=border_color)
-
-                # Resize the image
-                width = 200  # Change this to the width you want
-                height = 200  # Change this to the height you want
-                image = image.resize((width, height))
-
-                # Display the image in Streamlit
-                image_placeholder.image(image, caption=f"Action: {action}", use_column_width=True)
-
-                # Add a small delay to display each image
-                time.sleep(0.001)
-
-            agent.be_reasonable(epoch)
-            losses.append(loss_t)
-            rewards.append(reward_t)
-
-            # Initialize a list to store the results of the last 5 epochs
+        # Display the results of each epoch in the sidebar
+        # Display the results of each epoch in a separate expandable section
+        with st.sidebar:
             
-            # Display the results of each epoch in the sidebar
-            # Display the results of each epoch in a separate expandable section
-            with st.sidebar:
-                
-                st.text(f"****** Results for Epoch {epoch} ******") 
-                st.text(f"---> Loss   = {loss_t}")
-                st.text(f"---> Reward = {reward_t}")
-            print(f"******** loss at epoch {epoch} = {loss_t} ********")
-            print(f"******** reward at epoch {epoch} = {reward_t} ********")
-            if end_simulation : 
-                epoch=epoch-1
-                break 
-        print(f"--------- saving the model at epoch {epoch} ---------")
-        agent.save()
-    if selected_model == "PPO":
-        # Instantiate environment and PPOAgent
-        env = gym.make("CartPole-v1",render_mode='rgb_array')
-        agent = PPOAgent(
-            n_actions=env.action_space.n,
-            batch_size=parameters['batch_size'],
-            lr=parameters['learning_rate'],
-            learn_epochs=parameters['learn_epochs'],
-            input_dims=env.observation_space.shape[0],
-            gamma=parameters['gamma'],  # If your PPOAgent uses gamma
-        )
-        image_placeholder = st.empty()
-        # Training loop
-        score_history = []
-        for i in range(parameters['n_games']):
-            observation, info = env.reset()
-            done = False
-            score = 0
-            while not done:
-                action, prob, val = agent.act(observation)
-                observation_, reward, done, info , _= env.step(action)
-                
-                # Add to score and remember experience
-                score += reward
-                agent.remember_exp(observation, action, prob, val, reward, done)
-                observation = observation_
-                
-                # Using Streamlit to display environment as images
-                frame = env.render()
-                image = Image.fromarray(frame)
-                image_placeholder.image(image, caption=f"Step: {len(score_history)}, Score: {score}", use_column_width=True)
-                time.sleep(0.01)  # Add delay to slow down rendering 
+            st.text(f"****** Results for Epoch {epoch} ******") 
+            st.text(f"---> Loss   = {loss_t}")
+            st.text(f"---> Reward = {reward_t}")
+        print(f"******** loss at epoch {epoch} = {loss_t} ********")
+        print(f"******** reward at epoch {epoch} = {reward_t} ********")
+        if end_simulation : 
+            epoch=epoch-1
+            break 
+    print(f"--------- saving the model at epoch {epoch} ---------")
+    agent.save()
+ 
+        
+        
+    return losses, rewards
 
-            # Update agent with collected experiences
-            loss = agent.learn()
-            
-            # Save and logging
-            score_history.append(score)
-            avg_score = np.mean(score_history[-100:])
-            with st.sidebar:
-                st.text(f"****** Game {i} ******") 
-                st.text(f"  ---> Score         = {score}")
-                st.text(f"  ---> Average Score = {avg_score}")
-                st.text(f"  ---> Loss          = {loss}")
-            print(f"Game {i} Score: {score}, Average Score: {avg_score}, Loss: {loss}")
-            losses.append(loss)
-            rewards.append(score)
-            if end_simulation:
-                i=i-1
-                break
-        print(f"--------- saving the model at epoch {i} ---------")
-        agent.save_model()
+def run_training_PPO(selected_game, selected_model, epochs,parameters):
+    losses = []
+    rewards = []
+
+    # Load the selected game environment
+  
     
+    # Instantiate environment and PPOAgent
+    env = gym.make("CartPole-v1",render_mode='rgb_array')
+    if keep_simulation :
+        parameters['save_name']=nammod
+    agent = PPOAgent(
+        n_actions=env.action_space.n,
+        batch_size=parameters['batch_size'],
+        lr=parameters['learning_rate'],
+        learn_epochs=parameters['learn_epochs'],
+        input_dims=env.observation_space.shape[0],
+        gamma=parameters['gamma'],  # If your PPOAgent uses gamma
+    )
+    if keep_simulation :
+        agent.load_model()
+    image_placeholder = st.empty()
+    # Training loop
+    score_history = []
+    for i in range(parameters['n_games']):
+        observation, info = env.reset()
+        done = False
+        score = 0
+        while not done:
+            action, prob, val = agent.act(observation)
+            observation_, reward, done, info , _= env.step(action)
             
+            # Add to score and remember experience
+            score += reward
+            agent.remember_exp(observation, action, prob, val, reward, done)
+            observation = observation_
+            
+            # Using Streamlit to display environment as images
+            frame = env.render()
+            image = Image.fromarray(frame)
+            image_placeholder.image(image, caption=f"Step: {len(score_history)}, Score: {score}", use_column_width=True)
+            time.sleep(0.01)  # Add delay to slow down rendering 
+
+        # Update agent with collected experiences
+        loss = agent.learn()
+        
+        # Save and logging
+        score_history.append(score)
+        avg_score = np.mean(score_history[-100:])
+        with st.sidebar:
+            st.text(f"****** Game {i} ******") 
+            st.text(f"  ---> Score         = {score}")
+            st.text(f"  ---> Average Score = {avg_score}")
+            st.text(f"  ---> Loss          = {loss}")
+        print(f"Game {i} Score: {score}, Average Score: {avg_score}, Loss: {loss}")
+        losses.append(loss)
+        rewards.append(score)
+        if end_simulation:
+            i=i-1
+            break
+    print(f"--------- saving the model at epoch {i} ---------")
+    agent.save_model()
+
+        
         
         
     return losses, rewards
 
 
+
 # Streamlit app
 st.title("Reinforcement Learning Training")
+   
+nammod = st.text_input("Enter your saved model name if u want to keep training or create one  ")
+nammod= str(nammod )+".pth"
 
 # User interface for selecting game, model, and epochs
-selected_model = st.selectbox("Select Model", [ "DQN","PPO", "ModelB"])
+selected_model = st.selectbox("Select Model", [ "DQN","PPO", "NONE"])
 if  selected_model == "PPO":
     selected_game = st.selectbox("Select Gym Game", [ "CartPole-v1"])
 
@@ -220,9 +242,11 @@ if selected_model == "DQN":
     namepth = st.sidebar.text_input("Enter your saving name for this model")
 
     # Check if the user has entered a name for the model
-    if not namepth:
+    if not namepth :
         st.sidebar.error("Please enter a name for the model before proceeding.")
-        st.stop()  # This will stop the execution of further statements until the name is entered
+        if nammod == ".pth" :
+            st.stop()
+     # This will stop the execution of further statements until the name is entered
 
     # Proceed with the code if a name is provided
     parameters['save_name'] = f"{namepth}.pth"
@@ -239,14 +263,16 @@ if selected_model == "DQN":
 
     #lr=0.05,gama=0.99,memory_size=1000,batch_size = 32,epsilon=1,chkpt_file="DQN.pth"
 # Button to start the simulation
-nammod = st.text_input("Enter your saved model name if u want to keep training ")
-nammod= str(nammod )+".pth"
+col1, col2, col3 = st.columns(3)
+    
+
 keep_simulation=False
 if (nammod != ".pth" ) :
-    keep_simulation = st.button("Start trained model ")
+    with col1:
+        keep_simulation = st.button("Start trained model ")
 
-
-start_simulation = st.button("Start Training")
+with col2:
+    start_simulation = st.button("Start Training")
 
 
 
@@ -265,18 +291,22 @@ def convert_seconds_to_hms(seconds):
 
 # Streamlit button for stopping and saving
 end_simulation = False
-if st.button("Stop and Save"):
-    end_simulation = True
+with col3:
+    if st.button("Stop and Save"):
+        end_simulation = True
 
 
-if start_simulation or keep_simulation:
+if start_simulation or keep_simulation: 
     # Record the start time
     
     print(parameters['save_name'])
     start_time = time.time()
 
     # Run training and get results
-    losses, rewards = run_training(selected_game, selected_model, epochs, parameters)
+    if selected_model == "DQN":
+        losses, rewards = run_training_DQN(selected_game, selected_model, epochs, parameters)
+    elif selected_model == "PPO":
+        losses, rewards = run_training_PPO(selected_game, selected_model, epochs, parameters)
 
     # Record the end time
     end_time = time.time()

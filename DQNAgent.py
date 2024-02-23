@@ -69,9 +69,11 @@ class DQNAgent:
             return 0.0
         
     def save(self):
+        print("... saving model ...")
         torch.save(self.q_net,self.chkpt_file)
 
     def load(self):
+        print("... loading model ...")
         self.q_net = torch.load(self.chkpt_file)
     def save_file(self,file_name):
         torch.save(self.q_net,file_name)
